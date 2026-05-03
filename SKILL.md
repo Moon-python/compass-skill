@@ -233,7 +233,48 @@ If ALL signals are unavailable → axis = INSUFFICIENT (handled in §5/§8).
 
 ## §5. Synthesizer & Severity
 
-[content in Task 6]
+### 5.1 Single Opus call
+
+After §3 produces the drift evidence and §4 produces the rot evidence, perform ONE Opus synthesis call combining both. Do not chain a second LLM call. The synthesizer:
+- Confirms each axis's severity (using §3.4 / §4.5 outputs as input, possibly tightening if cross-axis context demands).
+- Computes the overall verdict per §5.2.
+- Selects the Top action per §6 action chain.
+- Lists Considered items per §8.
+
+### 5.2 Verdict aggregation
+
+Apply this rule mechanically (no LLM judgment, deterministic):
+
+| Drift axis | Rot axis | Verdict |
+|---|---|---|
+| SAFE | SAFE | **PROCEED** |
+| SUSPICIOUS | SAFE | **CONSIDER** |
+| SAFE | SUSPICIOUS | **CONSIDER** |
+| SUSPICIOUS | SUSPICIOUS | **STOP** |
+| CRITICAL | (any non-INSUFFICIENT) | **STOP** |
+| (any non-INSUFFICIENT) | CRITICAL | **STOP** |
+
+Equivalent prose: both SAFE → PROCEED. One SUSPICIOUS, other SAFE → CONSIDER. One CRITICAL OR both SUSPICIOUS → STOP.
+
+### 5.3 Drift severity table (semantic, Opus judgment)
+
+| Severity | Definition |
+|---|---|
+| SAFE | Recent N turns are in direct line with baseline. No divergence. |
+| SUSPICIOUS | Minor pivot — scope narrowed/widened, side investigation, but baseline still recognizable. |
+| CRITICAL | Direction reversed (baseline X, current ¬X) OR scope creep (entirely new system stacked on top of baseline). |
+
+### 5.4 INSUFFICIENT handling
+
+If a data source fails, the corresponding axis is INSUFFICIENT (not SAFE):
+
+| Failure | Axis result | Output behavior |
+|---|---|---|
+| Transcript unreadable / wrong session id / no `user`+`assistant` entries | drift = INSUFFICIENT | Output rot only; verdict computed from rot alone (treat drift as SAFE for verdict math, but mark INSUFFICIENT in output) |
+| All rot collectors fail (no marker, no git, no lint, no LLM input) | rot = INSUFFICIENT | Output drift only; mirror rule above |
+| Both fail | both INSUFFICIENT | Output: `cannot collect signals; check tool availability` and abort |
+
+When verdict is computed with one axis INSUFFICIENT, demote the verdict ceiling: never report PROCEED with confidence — at most CONSIDER, with a note that one axis was uncheckable.
 
 ## §6. Output Template & Action Chain
 
