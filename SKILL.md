@@ -278,7 +278,67 @@ When verdict is computed with one axis INSUFFICIENT, demote the verdict ceiling:
 
 ## §6. Output Template & Action Chain
 
-[content in Task 7]
+### 6.1 Output skeleton (mandatory)
+
+Emit output in EXACTLY this structure. Match user language (Korean input → Korean prose; English input → English prose). Section headers and verdict tokens stay English.
+
+````
+## /compass — <session intent 한 줄 요약>
+
+### Drift Check  [SAFE | SUSPICIOUS | CRITICAL | INSUFFICIENT]
+<한 줄 요약>
+
+- Initial intent: "<baseline 한 줄, source 인용 (arg / spec / transcript line / user response)>"
+- Recent N turns: <최근 작업 한 줄 요약>
+- Drift signal: <구체적 갭 1-2줄, transcript line 참조 가능>
+
+### Rot Check  [SAFE | SUSPICIOUS | CRITICAL | INSUFFICIENT]
+<한 줄 요약>
+
+- Git: <X files / Y lines uncommitted>
+- Tests: <pass/fail counts | "stale (cache age: Nm)" | "no cache">
+- Lint: <W warnings / E errors | "unavailable">
+- File bloat: <files >500 lines, recently modified | none>
+- TODO: <count>
+- Architecture: <circular deps + LLM boundary judgment 1-2줄>
+
+---
+
+**Verdict: PROCEED | CONSIDER | STOP**
+
+<verdict 한 줄 근거>
+
+**Top action:**
+<후속 행동 — §6.2 table에서 매핑>
+
+**Considered:** <검사했으나 트리거 안 한 신호 + 미가용 신호 명시>
+````
+
+### 6.2 Action chain mapping
+
+Pick exactly ONE Top action based on the highest-severity axis. If both axes hit CRITICAL, use the bottom row.
+
+| Axis | Severity | Top action |
+|---|---|---|
+| Drift | SUSPICIOUS | "의도 재명시: `/compass <intent>`로 baseline 갱신, 또는 명시적 pivot 선언" |
+| Drift | CRITICAL | "STOP — 처음 의도와 정반대 방향. 새 세션 권장 또는 `superpowers:brainstorming`으로 새 의도 재정의" |
+| Rot | SUSPICIOUS | "cleanup commit + lint fix 권장" |
+| Rot | CRITICAL | "STOP — refactor 필요. `simplify` 스킬 / 휴식 후 작은 단위로 작업 분할 / `investigate`로 깨진 부분 root-cause" |
+| BOTH CRITICAL | — | "STOP — 새 세션 강력 권장. 현재 세션 commit/stash 후 fresh로 재시작" |
+
+Note: action chain references `superpowers:brainstorming`, `simplify`, `investigate` — not `/decide`. `/compass`'s job is internal-data audit; external-research decisions belong to `/decide` and are out of scope here.
+
+### 6.3 Considered line — always present
+
+Required even when verdict = PROCEED. Lists:
+- Signals checked but BELOW threshold (transparent that we looked).
+- Signals that were `unavailable` / `stale` / `no cache` (transparent that we couldn't look).
+
+Examples:
+- `Considered: lint (3 warnings, below SUSPICIOUS), TODO (7, below SUSPICIOUS), test cache (no .pytest_cache found, skipped).`
+- `Considered: circular dep (madge unavailable, skipped); architecture LLM (no clear layer structure, pattern-only check passed).`
+
+The Considered line defends against the LLM hallucinating coverage and gives the user the audit trail. (Pattern validated by `/decide`.)
 
 ## §7. Trust Boundary
 
