@@ -108,9 +108,9 @@ for r, c in last_n:
 "
 ```
 
-### 3.4 Opus judgment — drift verdict
+### 3.4 LLM judgment — drift verdict
 
-Single LLM call. Inputs: baseline string (from §3.2) + concatenated recent N turns (from §3.3). Output: drift severity per the §5 drift severity table — SAFE / SUSPICIOUS / CRITICAL with one-sentence rationale and (when possible) a transcript line citation pinpointing the divergence.
+Single LLM call (running model — capability depends on active session model). Inputs: baseline string (from §3.2) + concatenated recent N turns (from §3.3). Output: drift severity per the §5 drift severity table — SAFE / SUSPICIOUS / CRITICAL with one-sentence rationale and (when possible) a transcript line citation pinpointing the divergence.
 
 Examples of judgment shape:
 - SAFE: "Recent turns are direct continuation of baseline (`build /compass skill`). No divergence."
@@ -156,7 +156,36 @@ find .pytest_cache coverage htmlcov coverage.xml node_modules/.cache/jest target
 # If mtime within 600 sec → fresh; else stale; if none found → "no cache"
 ```
 
-When cache is fresh, read the artifact to extract pass/fail counts (parser is project-specific: `lastfailed` is JSON, `coverage.xml` is XML, etc.). If parsing fails, treat as "fresh but uncountable" — note in output.
+When cache is fresh, extract pass/fail counts using these parsers:
+
+```bash
+# pytest lastfailed — failed test IDs (count = number of failing tests)
+uv run python3 -c "
+import json, pathlib
+p = pathlib.Path('.pytest_cache/v/cache/lastfailed')
+if p.exists():
+    d = json.loads(p.read_text())
+    print(len(d), 'failed test(s) recorded in lastfailed')
+else:
+    print('lastfailed not found')
+"
+
+# coverage.xml — line coverage summary
+uv run python3 -c "
+import xml.etree.ElementTree as ET, pathlib
+p = pathlib.Path('coverage.xml')
+if p.exists():
+    root = ET.parse(p).getroot()
+    covered = root.get('lines-covered', '?')
+    valid = root.get('lines-valid', '?')
+    rate = root.get('line-rate', '?')
+    print(f'coverage: {covered}/{valid} lines ({float(rate)*100:.1f}%)')
+else:
+    print('coverage.xml not found')
+"
+```
+
+If parsing fails (malformed file, unexpected schema), treat as "fresh but uncountable" — note in output. Do not abort.
 
 **Lint:**
 ```bash
@@ -213,7 +242,7 @@ Inputs:
 - Top-of-file `import` / `from` / `use` / `require` statements of files modified in the last 14 days.
 - Directory tree to depth 3: `find . -type d -maxdepth 3 -not -path '*/node_modules/*' -not -path '*/.git/*'`.
 
-Single Opus pass judges:
+Single LLM pass (running model) judges:
 - **Layer breach** — does a high-level module directly import a low-level concrete (e.g., UI → raw DB driver bypassing service)?
 - **Unrelated-domain imports** — does one file import from many unrelated top-level packages (e.g., a single file pulling auth + payments + analytics + UI)?
 - **Pattern violation** — do recently-added files break the dominant naming/location convention of the directory they sit in?
@@ -233,9 +262,9 @@ If ALL signals are unavailable → axis = INSUFFICIENT (handled in §5/§8).
 
 ## §5. Synthesizer & Severity
 
-### 5.1 Single Opus call
+### 5.1 Single LLM synthesis call
 
-After §3 produces the drift evidence and §4 produces the rot evidence, perform ONE Opus synthesis call combining both. Do not chain a second LLM call. The synthesizer:
+After §3 produces the drift evidence and §4 produces the rot evidence, perform ONE LLM synthesis call (running model) combining both. Do not chain a second LLM call. The synthesizer:
 - Confirms each axis's severity (using §3.4 / §4.5 outputs as input, possibly tightening if cross-axis context demands).
 - Computes the overall verdict per §5.2.
 - Selects the Top action per §6 action chain.
